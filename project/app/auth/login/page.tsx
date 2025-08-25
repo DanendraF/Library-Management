@@ -44,7 +44,10 @@ export default function LoginPage() {
           title: "Success",
           description: "Welcome back!",
         });
-        router.push(`/dashboard/${role}`);
+        const saved = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        const user = saved ? JSON.parse(saved) : null;
+        const targetRole = user?.role || role || 'member';
+        router.push(`/dashboard/${targetRole}`);
       } else {
         toast({
           title: "Error",
@@ -55,7 +58,7 @@ export default function LoginPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Something went wrong",
+        description: (error as Error)?.message || "Something went wrong",
         variant: "destructive",
       });
     } finally {

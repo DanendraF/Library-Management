@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, Grid, List, Star, Calendar, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,105 +13,48 @@ import { Navigation } from '@/components/layout/navigation';
 import { Separator } from '@/components/ui/separator';
 import Link from 'next/link';
 
-const books = [
-  {
-    id: 1,
-    title: "The Great Gatsby",
-    author: "F. Scott Fitzgerald",
-    cover: "https://images.pexels.com/photos/159711/books-bookstore-book-reading-159711.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Classic Literature",
-    isbn: "9780743273565",
-    publishedYear: 1925,
-    available: true,
-    rating: 4.8,
-    totalCopies: 5,
-    availableCopies: 3,
-    description: "A classic American novel set in the summer of 1922."
-  },
-  {
-    id: 2,
-    title: "To Kill a Mockingbird",
-    author: "Harper Lee",
-    cover: "https://images.pexels.com/photos/1029141/pexels-photo-1029141.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Fiction",
-    isbn: "9780061120084",
-    publishedYear: 1960,
-    available: true,
-    rating: 4.9,
-    totalCopies: 4,
-    availableCopies: 2,
-    description: "A gripping tale of racial injustice and childhood innocence."
-  },
-  {
-    id: 3,
-    title: "1984",
-    author: "George Orwell",
-    cover: "https://images.pexels.com/photos/415071/pexels-photo-415071.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Dystopian",
-    isbn: "9780451524935",
-    publishedYear: 1949,
-    available: false,
-    rating: 4.7,
-    totalCopies: 3,
-    availableCopies: 0,
-    description: "A dystopian social science fiction novel."
-  },
-  {
-    id: 4,
-    title: "Pride and Prejudice",
-    author: "Jane Austen",
-    cover: "https://images.pexels.com/photos/694740/pexels-photo-694740.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Romance",
-    isbn: "9780141439518",
-    publishedYear: 1813,
-    available: true,
-    rating: 4.6,
-    totalCopies: 6,
-    availableCopies: 4,
-    description: "A romantic novel that critiques the British landed gentry."
-  },
-  {
-    id: 5,
-    title: "The Catcher in the Rye",
-    author: "J.D. Salinger",
-    cover: "https://images.pexels.com/photos/1370294/pexels-photo-1370294.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Coming-of-Age",
-    isbn: "9780316769174",
-    publishedYear: 1951,
-    available: true,
-    rating: 4.3,
-    totalCopies: 4,
-    availableCopies: 1,
-    description: "A controversial novel about teenage rebellion and alienation."
-  },
-  {
-    id: 6,
-    title: "Harry Potter and the Sorcerer's Stone",
-    author: "J.K. Rowling",
-    cover: "https://images.pexels.com/photos/1319854/pexels-photo-1319854.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Fantasy",
-    isbn: "9780439708180",
-    publishedYear: 1997,
-    available: true,
-    rating: 4.9,
-    totalCopies: 8,
-    availableCopies: 5,
-    description: "The beginning of the magical Harry Potter series."
-  }
-];
+type ApiBook = {
+  id: string;
+  title: string;
+  author: string;
+  category_id?: string | null;
+  isbn?: string | null;
+  published_year?: number | null;
+  cover_url?: string | null;
+  description?: string | null;
+  total_copies: number;
+  available_copies: number;
+  rating?: number | null;
+};
 
-const categories = [
-  "All Categories",
-  "Classic Literature",
-  "Fiction",
-  "Dystopian",
-  "Romance",
-  "Coming-of-Age",
-  "Fantasy",
-  "Science Fiction",
-  "Biography",
-  "History"
-];
+type Category = { id: string; name: string };
+
+type UIBook = {
+  id: string | number;
+  title: string;
+  author: string;
+  cover: string;
+  category: string;
+  isbn?: string | null;
+  publishedYear: number | 0;
+  available: boolean;
+  rating: number;
+  totalCopies: number;
+  availableCopies: number;
+  description: string;
+};
+
+const API_BASE = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_BASE) || 'http://localhost:4000';
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { headers: { 'Content-Type': 'application/json' }, ...(init || {}) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = (data && (data.message || data.error)) || 'Request failed';
+    throw new Error(message);
+  }
+  return data as T;
+}
 
 export default function CatalogPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,12 +62,44 @@ export default function CatalogPage() {
   const [availability, setAvailability] = useState('all');
   const [sortBy, setSortBy] = useState('title');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [filteredBooks, setFilteredBooks] = useState(books);
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [books, setBooks] = useState<UIBook[]>([]);
 
   useEffect(() => {
-    let filtered = books;
+    const load = async () => {
+      try {
+        const cats = await api<{ categories: Category[] }>(`/api/books/categories`);
+        setCategories(cats.categories || []);
+        const resp = await api<{ books: ApiBook[] }>(`/api/books?limit=500`);
+        const byId: Record<string, string> = Object.fromEntries((cats.categories || []).map(c => [c.id, c.name]));
+        const mapped: UIBook[] = (resp.books || []).map((b) => ({
+          id: b.id,
+          title: b.title,
+          author: b.author,
+          cover: b.cover_url || 'https://images.pexels.com/photos/415071/pexels-photo-415071.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop',
+          category: b.category_id ? (byId[b.category_id] || 'Uncategorized') : 'Uncategorized',
+          isbn: b.isbn || null,
+          publishedYear: b.published_year || 0,
+          available: (b.available_copies ?? 0) > 0,
+          rating: Number(b.rating ?? 0),
+          totalCopies: b.total_copies,
+          availableCopies: b.available_copies,
+          description: b.description || '',
+        }));
+        setBooks(mapped);
+      } catch (_e) {
+        setBooks([]);
+      }
+    };
+    load();
+  }, []);
 
-    // Filter by search query
+  const categoryOptions = useMemo(() => ['All Categories', ...categories.map((c) => c.name)], [categories]);
+
+  const filteredBooks = useMemo(() => {
+    let filtered = books.slice();
+
     if (searchQuery) {
       filtered = filtered.filter(book =>
         book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -133,19 +108,16 @@ export default function CatalogPage() {
       );
     }
 
-    // Filter by category
     if (selectedCategory !== 'All Categories') {
       filtered = filtered.filter(book => book.category === selectedCategory);
     }
 
-    // Filter by availability
     if (availability === 'available') {
       filtered = filtered.filter(book => book.available);
     } else if (availability === 'unavailable') {
       filtered = filtered.filter(book => !book.available);
     }
 
-    // Sort books
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'title':
@@ -153,16 +125,16 @@ export default function CatalogPage() {
         case 'author':
           return a.author.localeCompare(b.author);
         case 'year':
-          return b.publishedYear - a.publishedYear;
+          return (b.publishedYear || 0) - (a.publishedYear || 0);
         case 'rating':
-          return b.rating - a.rating;
+          return (b.rating || 0) - (a.rating || 0);
         default:
           return 0;
       }
     });
 
-    setFilteredBooks(filtered);
-  }, [searchQuery, selectedCategory, availability, sortBy]);
+    return filtered;
+  }, [books, searchQuery, selectedCategory, availability, sortBy]);
 
   const FilterSidebar = ({ isMobile = false }) => (
     <div className={`space-y-6 ${isMobile ? 'p-6' : ''}`}>
@@ -174,7 +146,7 @@ export default function CatalogPage() {
       <div>
         <h4 className="font-medium mb-3">Category</h4>
         <div className="space-y-2">
-          {categories.map((category) => (
+          {categoryOptions.map((category) => (
             <div key={category} className="flex items-center space-x-2">
               <Checkbox
                 id={category}
@@ -220,7 +192,7 @@ export default function CatalogPage() {
     </div>
   );
 
-  const BookCard = ({ book }: { book: typeof books[0] }) => (
+  const BookCard = ({ book }: { book: UIBook }) => (
     <Card className="group hover:shadow-xl transition-all duration-300 overflow-hidden">
       <div className="relative overflow-hidden">
         <img 
@@ -229,8 +201,8 @@ export default function CatalogPage() {
           className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-500"
         />
         <div className="absolute top-3 right-3">
-          <Badge variant={book.available ? "default" : "destructive"}>
-            {book.available ? `${book.availableCopies} Available` : "Borrowed"}
+          <Badge variant={book.available ? 'default' : 'destructive'}>
+            {book.available ? `${book.availableCopies} Available` : 'Borrowed'}
           </Badge>
         </div>
         <div className="absolute top-3 left-3">
@@ -251,16 +223,16 @@ export default function CatalogPage() {
         </p>
         <p className="text-gray-500 mb-3 flex items-center">
           <Calendar className="w-4 h-4 mr-1" />
-          {book.publishedYear}
+          {book.publishedYear || '-'}
         </p>
         <p className="text-sm text-gray-600 mb-4 line-clamp-2">{book.description}</p>
         <div className="flex gap-2">
           <Button 
             className="flex-1" 
-            variant={book.available ? "default" : "secondary"}
+            variant={book.available ? 'default' : 'secondary'}
             disabled={!book.available}
           >
-            {book.available ? "Borrow Book" : "Currently Unavailable"}
+            {book.available ? 'Borrow Book' : 'Currently Unavailable'}
           </Button>
           <Button variant="outline" size="sm">
             Details
@@ -270,7 +242,7 @@ export default function CatalogPage() {
     </Card>
   );
 
-  const BookListItem = ({ book }: { book: typeof books[0] }) => (
+  const BookListItem = ({ book }: { book: UIBook }) => (
     <Card className="hover:shadow-md transition-shadow duration-200">
       <CardContent className="p-6">
         <div className="flex gap-4">
@@ -286,7 +258,7 @@ export default function CatalogPage() {
                 <p className="text-gray-600 mb-1">by {book.author}</p>
                 <div className="flex items-center gap-2 mb-2">
                   <Badge variant="outline">{book.category}</Badge>
-                  <span className="text-sm text-gray-500">{book.publishedYear}</span>
+                  <span className="text-sm text-gray-500">{book.publishedYear || '-'}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -294,8 +266,8 @@ export default function CatalogPage() {
                   <Star className="w-4 h-4 mr-1 fill-yellow-400 text-yellow-400" />
                   {book.rating}
                 </div>
-                <Badge variant={book.available ? "default" : "destructive"}>
-                  {book.available ? `${book.availableCopies} Available` : "Borrowed"}
+                <Badge variant={book.available ? 'default' : 'destructive'}>
+                  {book.available ? `${book.availableCopies} Available` : 'Borrowed'}
                 </Badge>
               </div>
             </div>
@@ -303,10 +275,10 @@ export default function CatalogPage() {
             <div className="flex gap-2">
               <Button 
                 size="sm"
-                variant={book.available ? "default" : "secondary"}
+                variant={book.available ? 'default' : 'secondary'}
                 disabled={!book.available}
               >
-                {book.available ? "Borrow Book" : "Unavailable"}
+                {book.available ? 'Borrow Book' : 'Unavailable'}
               </Button>
               <Button variant="outline" size="sm">
                 View Details

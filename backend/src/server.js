@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import authRouter from './routes/auth.js';
+import booksRouter from './routes/books.js';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.get('/api/health', (_req, res) => {
 
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/books', booksRouter);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

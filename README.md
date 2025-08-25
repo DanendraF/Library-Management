@@ -130,3 +130,24 @@ GET http://localhost:4000/api/auth/users/<user_id>?includeEmail=false
 
 ## Lisensi
 Untuk keperluan pembelajaran/portofolio. Silakan sesuaikan lisensi jika diperlukan.
+
+## Update Harian (Ringkas)
+
+### 2025-08-25
+- Backend Auth: refactor ke service layer (`src/services/authService.js`), routes `/api/auth/*`, env loader diperbaiki.
+- Database Supabase:
+  - `public.users` (RLS), `user_role` enum.
+  - Tambah `categories` dan `books` + trigger `updated_at`, policy read-only publik untuk katalog.
+- Backend Books:
+  - Services: `list/create categories`, `CRUD books`, `bulk insert` (`POST /api/books/bulk`).
+  - Routes: `/api/books`, `/api/books/categories` dimount di server.
+- Frontend Auth:
+  - `project/lib/auth-context.tsx` terhubung ke backend `/api/auth/*` (login/signup/me). Sesi disimpan via token + user.
+  - Login page update: redirect berdasarkan `user.role` dari backend, toast error detail saat gagal.
+- Librarian UI:
+  - Halaman `dashboard/librarian/books`: daftar buku, search, filter kategori, Add/Edit/Delete dengan dialog konfirmasi; quick add kategori.
+- Catalog UI:
+  - Mengambil data asli dari backend (`/api/books` dan `/api/books/categories`), menggantikan dummy.
+- Keamanan & DX:
+  - Root `.gitignore` mengabaikan semua `.env` di seluruh folder.
+  - README ditambahkan (setup, endpoint, arsitektur, dan update hari ini).
