@@ -11,6 +11,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Navigation } from '@/components/layout/navigation';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { useAuth } from '@/lib/auth-context';
+import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
 type ApiBook = {
@@ -57,6 +61,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export default function CatalogPage() {
+  const { user, token } = useAuth();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [availability, setAvailability] = useState('all');
@@ -65,6 +71,10 @@ export default function CatalogPage() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [books, setBooks] = useState<UIBook[]>([]);
+  const [borrowingBook, setBorrowingBook] = useState<UIBook | null>(null);
+  const [showBorrowDialog, setShowBorrowDialog] = useState(false);
+  const [dueDate, setDueDate] = useState('');
+  const [borrowing, setBorrowing] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -96,6 +106,118 @@ export default function CatalogPage() {
   }, []);
 
   const categoryOptions = useMemo(() => ['All Categories', ...categories.map((c) => c.name)], [categories]);
+
+  const handleBorrowBook = async () => {
+    if (!user || !token || !borrowingBook) {
+      toast({
+        title: "Authentication Error",
+        description: "Please login to borrow books",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setBorrowing(true);
+      const response = await fetch(`${API_BASE}/api/borrowings`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          book_id: borrowingBook.id,
+          due_date: dueDate,
+          notes: ''
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        
+        // Handle specific authentication errors
+        if (response.status === 401) {
+          toast({
+            title: "Authentication Error",
+            description: "Your session has expired. Please login again.",
+            variant: "destructive",
+          });
+          // Clear invalid session
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user');
+          window.location.href = '/auth/login';
+          return;
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      toast({
+        title: "Success",
+        description: `Successfully borrowed "${borrowingBook.title}"`,
+      });
+
+      // Refresh books to update availability
+      const resp = await api<{ books: ApiBook[] }>(`/api/books?limit=500`);
+      const byId: Record<string, string> = Object.fromEntries((categories || []).map(c => [c.id, c.name]));
+      const mapped: UIBook[] = (resp.books || []).map((b) => ({
+        id: b.id,
+        title: b.title,
+        author: b.author,
+        cover: b.cover_url || 'https://images.pexels.com/photos/415071/pexels-photo-415071.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop',
+        category: b.category_id ? (byId[b.category_id] || 'Uncategorized') : 'Uncategorized',
+        isbn: b.isbn || null,
+        publishedYear: b.published_year || 0,
+        available: (b.available_copies ?? 0) > 0,
+        rating: Number(b.rating ?? 0),
+        totalCopies: b.total_copies,
+        availableCopies: b.available_copies,
+        description: b.description || '',
+      }));
+      setBooks(mapped);
+
+      setShowBorrowDialog(false);
+      setBorrowingBook(null);
+      setDueDate('');
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to borrow book',
+        variant: "destructive",
+      });
+    } finally {
+      setBorrowing(false);
+    }
+  };
+
+  const openBorrowDialog = (book: UIBook) => {
+    if (!user || !token) {
+      toast({
+        title: "Login Required",
+        description: "Please login to borrow books",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check if token is valid
+    if (!token || token === 'null' || token === 'undefined') {
+      toast({
+        title: "Authentication Error",
+        description: "Please login again to continue",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setBorrowingBook(book);
+    // Set default due date to 14 days from now
+    const defaultDueDate = new Date();
+    defaultDueDate.setDate(defaultDueDate.getDate() + 14);
+    setDueDate(defaultDueDate.toISOString().split('T')[0]);
+    setShowBorrowDialog(true);
+  };
 
   const filteredBooks = useMemo(() => {
     let filtered = books.slice();
@@ -231,6 +353,7 @@ export default function CatalogPage() {
             className="flex-1" 
             variant={book.available ? 'default' : 'secondary'}
             disabled={!book.available}
+            onClick={() => openBorrowDialog(book)}
           >
             {book.available ? 'Borrow Book' : 'Currently Unavailable'}
           </Button>
@@ -277,6 +400,7 @@ export default function CatalogPage() {
                 size="sm"
                 variant={book.available ? 'default' : 'secondary'}
                 disabled={!book.available}
+                onClick={() => openBorrowDialog(book)}
               >
                 {book.available ? 'Borrow Book' : 'Unavailable'}
               </Button>
@@ -400,6 +524,69 @@ export default function CatalogPage() {
           </div>
         </div>
       </div>
+
+      {/* Borrow Book Dialog */}
+      <Dialog open={showBorrowDialog} onOpenChange={setShowBorrowDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Borrow Book</DialogTitle>
+            <DialogDescription>
+              {borrowingBook && (
+                <div className="mt-4">
+                  <div className="flex items-center space-x-4">
+                    <img
+                      src={borrowingBook.cover}
+                      alt={borrowingBook.title}
+                      className="w-16 h-20 object-cover rounded"
+                    />
+                    <div>
+                      <h3 className="font-semibold">{borrowingBook.title}</h3>
+                      <p className="text-sm text-muted-foreground">by {borrowingBook.author}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {borrowingBook.availableCopies} copies available
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="due-date">Due Date</Label>
+              <Input
+                id="due-date"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Please select when you plan to return this book
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowBorrowDialog(false);
+                setBorrowingBook(null);
+                setDueDate('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBorrowBook}
+              disabled={borrowing || !dueDate}
+            >
+              {borrowing ? 'Borrowing...' : 'Borrow Book'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

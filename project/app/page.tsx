@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, BookOpen, Users, Award, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,62 +9,108 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { Navigation } from '@/components/layout/navigation';
 
-const featuredBooks = [
-  {
-    id: 1,
-    title: "The Great Gatsby",
-    author: "F. Scott Fitzgerald",
-    cover: "https://images.pexels.com/photos/159711/books-bookstore-book-reading-159711.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Classic Literature",
-    available: true,
-    rating: 4.8
-  },
-  {
-    id: 2,
-    title: "To Kill a Mockingbird",
-    author: "Harper Lee",
-    cover: "https://images.pexels.com/photos/1029141/pexels-photo-1029141.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Fiction",
-    available: true,
-    rating: 4.9
-  },
-  {
-    id: 3,
-    title: "1984",
-    author: "George Orwell",
-    cover: "https://images.pexels.com/photos/415071/pexels-photo-415071.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Dystopian",
-    available: false,
-    rating: 4.7
-  },
-  {
-    id: 4,
-    title: "Pride and Prejudice",
-    author: "Jane Austen",
-    cover: "https://images.pexels.com/photos/694740/pexels-photo-694740.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop",
-    category: "Romance",
-    available: true,
-    rating: 4.6
-  }
-];
+type ApiBook = {
+  id: string;
+  title: string;
+  author: string;
+  category_id?: string | null;
+  isbn?: string | null;
+  published_year?: number | null;
+  cover_url?: string | null;
+  description?: string | null;
+  total_copies: number;
+  available_copies: number;
+  rating?: number | null;
+};
 
-const categories = [
-  { name: "Fiction", icon: BookOpen, count: 1250, color: "bg-blue-100 text-blue-800" },
-  { name: "Non-Fiction", icon: Users, count: 890, color: "bg-green-100 text-green-800" },
-  { name: "Science", icon: Award, count: 650, color: "bg-purple-100 text-purple-800" },
-  { name: "Technology", icon: TrendingUp, count: 420, color: "bg-orange-100 text-orange-800" },
-  { name: "History", icon: BookOpen, count: 380, color: "bg-red-100 text-red-800" },
-  { name: "Biography", icon: Users, count: 290, color: "bg-yellow-100 text-yellow-800" }
-];
+type Category = { id: string; name: string };
+
+type UIBook = {
+  id: string;
+  title: string;
+  author: string;
+  cover: string;
+  category: string;
+  available: boolean;
+  rating: number;
+};
+
+const API_BASE = (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_BASE) || 'http://localhost:4000';
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { headers: { 'Content-Type': 'application/json' }, ...(init || {}) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = (data && (data.message || data.error)) || 'Request failed';
+    throw new Error(message);
+  }
+  return data as T;
+}
 
 export default function Homepage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [books, setBooks] = useState<UIBook[]>([]);
+  const [usersCount, setUsersCount] = useState<number>(0);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const cats = await api<{ categories: Category[] }>(`/api/books/categories`);
+        setCategories(cats.categories || []);
+
+        const resp = await api<{ books: ApiBook[] }>(`/api/books?limit=500`);
+        const byId: Record<string, string> = Object.fromEntries((cats.categories || []).map(c => [c.id, c.name]));
+        const mapped: UIBook[] = (resp.books || []).map((b) => ({
+          id: b.id,
+          title: b.title,
+          author: b.author,
+          cover: b.cover_url || 'https://images.pexels.com/photos/415071/pexels-photo-415071.jpeg?auto=compress&cs=tinysrgb&w=300&h=400&fit=crop',
+          category: b.category_id ? (byId[b.category_id] || 'Uncategorized') : 'Uncategorized',
+          available: (b.available_copies ?? 0) > 0,
+          rating: Number(b.rating ?? 0),
+        }));
+        setBooks(mapped);
+
+        // Users count (public endpoint with limited fields)
+        const users = await api<{ users: any[] }>(`/api/auth/users?limit=200`);
+        setUsersCount((users.users || []).length);
+      } catch (_e) {
+        setBooks([]);
+        setCategories([]);
+        setUsersCount(0);
+      }
+    };
+    load();
+  }, []);
+
+  const categoryList = useMemo(() => ['All', ...categories.map(c => c.name)], [categories]);
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of categories) counts[c.name] = 0;
+    for (const b of books) {
+      if (counts[b.category] === undefined) counts[b.category] = 0;
+      counts[b.category] += 1;
+    }
+    return counts;
+  }, [categories, books]);
+
+  const featuredBooks: UIBook[] = useMemo(() => {
+    return books
+      .slice()
+      .sort((a, b) => b.rating - a.rating)
+      .slice(0, 4);
+  }, [books]);
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
       window.location.href = `/catalog?search=${encodeURIComponent(searchQuery)}`;
     }
   };
+
+  const totalBooks = books.length;
+  const totalCategories = categories.length;
+  const activeMembers = usersCount; // approximate
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50">
@@ -109,15 +155,15 @@ export default function Homepage() {
           {/* Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-20">
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600">15,000+</div>
+              <div className="text-3xl font-bold text-blue-600">{totalBooks}</div>
               <div className="text-gray-600">Books Available</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-emerald-600">2,500+</div>
+              <div className="text-3xl font-bold text-emerald-600">{activeMembers}</div>
               <div className="text-gray-600">Active Members</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-purple-600">50+</div>
+              <div className="text-3xl font-bold text-purple-600">{totalCategories}</div>
               <div className="text-gray-600">Categories</div>
             </div>
             <div className="text-center">
@@ -134,7 +180,8 @@ export default function Homepage() {
           <h2 className="text-3xl font-bold text-center mb-12 text-gray-900">Browse by Category</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
             {categories.map((category, index) => {
-              const Icon = category.icon;
+              const count = categoryCounts[category.name] || 0;
+              const Icon = BookOpen; // keep a consistent icon
               return (
                 <Link key={index} href={`/catalog?category=${encodeURIComponent(category.name)}`}>
                   <Card className="group hover:shadow-lg transition-all duration-300 cursor-pointer border-2 hover:border-blue-200">
@@ -143,8 +190,8 @@ export default function Homepage() {
                         <Icon className="h-8 w-8 text-blue-600" />
                       </div>
                       <h3 className="font-semibold text-gray-900 mb-2">{category.name}</h3>
-                      <Badge variant="secondary" className={category.color}>
-                        {category.count} books
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                        {count} books
                       </Badge>
                     </CardContent>
                   </Card>
@@ -188,7 +235,7 @@ export default function Homepage() {
                         }`}
                       />
                     ))}
-                    <span className="text-sm text-gray-600 ml-2">{book.rating}</span>
+                    <span className="text-sm text-gray-600 ml-2">{book.rating.toFixed(1)}</span>
                   </div>
                   <h3 className="font-bold text-lg text-gray-900 mb-2 line-clamp-2">{book.title}</h3>
                   <p className="text-gray-600 mb-2">by {book.author}</p>

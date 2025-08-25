@@ -11,6 +11,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
+  token: string | null;
   login: (email: string, password: string, role?: string) => Promise<boolean>;
   logout: () => void;
   signup: (name: string, email: string, password: string, role: string) => Promise<boolean>;
@@ -43,37 +44,54 @@ async function apiRequest(path: string, options?: RequestInit) {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Restore session from localStorage and optionally validate via /me
-    try {
-      const savedUser = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.user) : null;
-      const token = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.token) : null;
-      if (savedUser && token) {
-        const parsed = JSON.parse(savedUser) as User;
-        setUser(parsed);
-        // Background validation (non-blocking)
-        apiRequest('/api/auth/me', {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
-        }).then((resp) => {
-          if (resp?.user) {
-            setUser(resp.user as User);
-            localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(resp.user));
+    // Restore session from localStorage and validate token
+    const restoreSession = async () => {
+      try {
+        const savedUser = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.user) : null;
+        const savedToken = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.token) : null;
+        
+        if (savedUser && savedToken) {
+          const parsed = JSON.parse(savedUser) as User;
+          setUser(parsed);
+          setToken(savedToken);
+          
+          // Validate token with backend
+          try {
+            const resp = await apiRequest('/api/auth/me', {
+              method: 'GET',
+              headers: { Authorization: `Bearer ${savedToken}` },
+            });
+            
+            if (resp?.user) {
+              setUser(resp.user as User);
+              localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(resp.user));
+            }
+          } catch (error) {
+            console.log('Token validation failed, clearing session');
+            // Token is invalid or expired
+            localStorage.removeItem(STORAGE_KEYS.token);
+            localStorage.removeItem(STORAGE_KEYS.user);
+            setUser(null);
+            setToken(null);
           }
-        }).catch(() => {
-          // invalid token → clear
-          localStorage.removeItem(STORAGE_KEYS.token);
-          localStorage.removeItem(STORAGE_KEYS.user);
-          setUser(null);
-        }).finally(() => setIsLoading(false));
-        return;
+        }
+      } catch (error) {
+        console.error('Error restoring session:', error);
+        // Clear invalid data
+        localStorage.removeItem(STORAGE_KEYS.token);
+        localStorage.removeItem(STORAGE_KEYS.user);
+        setUser(null);
+        setToken(null);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (_e) {
-      // ignore
-    }
-    setIsLoading(false);
+    };
+
+    restoreSession();
   }, []);
 
   const login = async (email: string, password: string, _role?: string): Promise<boolean> => {
@@ -86,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(STORAGE_KEYS.token, resp.token);
         localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(resp.user));
         setUser(resp.user as User);
+        setToken(resp.token);
         return true;
       }
       return false;
@@ -104,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(STORAGE_KEYS.token, resp.token);
         localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(resp.user));
         setUser(resp.user as User);
+        setToken(resp.token);
         return true;
       }
       return false;
@@ -114,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
+    setToken(null);
     if (typeof window !== 'undefined') {
       localStorage.removeItem(STORAGE_KEYS.token);
       localStorage.removeItem(STORAGE_KEYS.user);
@@ -121,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, signup, isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, logout, signup, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
