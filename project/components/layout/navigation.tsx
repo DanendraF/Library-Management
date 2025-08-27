@@ -75,7 +75,7 @@ export function Navigation() {
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
             <BookOpen className="h-8 w-8 text-blue-600" />
-            <span className="text-xl font-bold text-gray-900">LibraryMS</span>
+            <span className="text-xl font-bold text-gray-900">LibraryDn</span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -134,7 +134,7 @@ export function Navigation() {
               <SheetContent side="right" className="w-80">
                 <div className="flex items-center space-x-2 mb-8">
                   <BookOpen className="h-6 w-6 text-blue-600" />
-                  <span className="text-lg font-bold">LibraryMS</span>
+                  <span className="text-lg font-bold">LibraryDn</span>
                 </div>
                 <MobileNav />
               </SheetContent>

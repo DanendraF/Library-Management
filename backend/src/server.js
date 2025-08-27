@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import authRouter from './routes/auth.js';
 import booksRouter from './routes/books.js';
 import borrowingsRouter from './routes/borrowings.js';
+import reviewsRouter from './routes/reviews.js';
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/books', booksRouter);
 app.use('/api/borrowings', borrowingsRouter);
+app.use('/api/reviews', reviewsRouter);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

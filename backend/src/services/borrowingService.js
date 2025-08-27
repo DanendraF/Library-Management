@@ -8,7 +8,7 @@ class BorrowingService {
                 .from('borrowings')
                 .select(`
                     *,
-                    users:user_id(id, email, full_name, role),
+                    users:user_id(id, email, name, role),
                     books:book_id(id, title, author, isbn, cover_url)
                 `)
                 .order('created_at', { ascending: false });
@@ -62,7 +62,7 @@ class BorrowingService {
                 .from('borrowings')
                 .select(`
                     *,
-                    users:user_id(id, email, full_name, role),
+                    users:user_id(id, email, name, role),
                     books:book_id(id, title, author, isbn, cover_url, published_year, total_copies, available_copies)
                 `)
                 .eq('id', borrowingId)
@@ -140,18 +140,23 @@ class BorrowingService {
     // Return a book
     async returnBook(borrowingId) {
         try {
-            // Get borrowing details
-            const borrowing = await this.getBorrowingById(borrowingId);
-            if (!borrowing) {
+            // Ambil data borrowing minimal untuk validasi dan referensi book_id
+            const { data: borrowingRow, error: borrowingErr } = await supabaseAdmin
+                .from('borrowings')
+                .select('id, book_id, status')
+                .eq('id', borrowingId)
+                .single();
+
+            if (borrowingErr || !borrowingRow) {
                 throw new Error('Borrowing not found');
             }
 
-            if (borrowing.status === 'returned') {
+            if (borrowingRow.status === 'returned') {
                 throw new Error('Book has already been returned');
             }
 
-            // Update borrowing status
-            const { data, error } = await supabaseAdmin
+            // Update status peminjaman menjadi returned
+            const { data: updatedBorrowing, error: updateBorrowingErr } = await supabaseAdmin
                 .from('borrowings')
                 .update({
                     status: 'returned',
@@ -161,17 +166,34 @@ class BorrowingService {
                 .select()
                 .single();
 
-            if (error) throw error;
+            if (updateBorrowingErr) throw updateBorrowingErr;
 
-            // Update book available copies
-            await supabaseAdmin
+            // Ambil stok buku terbaru
+            const { data: bookRow, error: bookErr } = await supabaseAdmin
                 .from('books')
-                .update({ 
-                    available_copies: borrowing.books.available_copies + 1 
-                })
-                .eq('id', borrowing.book_id);
+                .select('available_copies, total_copies')
+                .eq('id', borrowingRow.book_id)
+                .single();
 
-            return data;
+            if (bookErr || !bookRow) {
+                throw new Error('Book not found for this borrowing');
+            }
+
+            const nextAvailable = Math.min(
+                bookRow.total_copies || 0,
+                (bookRow.available_copies || 0) + 1
+            );
+
+            // Update stok buku berdasarkan nilai terkini
+            const { error: updateBookErr } = await supabaseAdmin
+                .from('books')
+                .update({ available_copies: nextAvailable })
+                .eq('id', borrowingRow.book_id);
+
+            if (updateBookErr) throw updateBookErr;
+
+            // Kembalikan borrowing lengkap (dengan relasi) setelah update
+            return await this.getBorrowingById(borrowingId);
         } catch (error) {
             throw new Error(`Failed to return book: ${error.message}`);
         }
@@ -232,7 +254,7 @@ class BorrowingService {
                 .from('borrowings')
                 .select(`
                     *,
-                    users:user_id(id, email, full_name),
+                    users:user_id(id, email, name),
                     books:book_id(id, title, author)
                 `)
                 .lt('due_date', new Date().toISOString())

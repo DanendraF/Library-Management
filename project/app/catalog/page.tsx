@@ -315,7 +315,7 @@ export default function CatalogPage() {
   );
 
   const BookCard = ({ book }: { book: UIBook }) => (
-    <Card className="group hover:shadow-xl transition-all duration-300 overflow-hidden">
+    <Card className="group hover:shadow-xl transition-all duration-300 overflow-hidden h-full min-h-[520px] flex flex-col">
       <div className="relative overflow-hidden">
         <img 
           src={book.cover} 
@@ -334,7 +334,7 @@ export default function CatalogPage() {
           </div>
         </div>
       </div>
-      <CardContent className="p-6">
+      <CardContent className="p-6 flex flex-col flex-1">
         <div className="mb-2">
           <Badge variant="outline">{book.category}</Badge>
         </div>
@@ -348,7 +348,7 @@ export default function CatalogPage() {
           {book.publishedYear || '-'}
         </p>
         <p className="text-sm text-gray-600 mb-4 line-clamp-2">{book.description}</p>
-        <div className="flex gap-2">
+        <div className="mt-auto flex gap-2">
           <Button 
             className="flex-1" 
             variant={book.available ? 'default' : 'secondary'}
@@ -357,7 +357,7 @@ export default function CatalogPage() {
           >
             {book.available ? 'Borrow Book' : 'Currently Unavailable'}
           </Button>
-          <Button variant="outline" size="sm">
+          <Button className="flex-1" variant="outline">
             Details
           </Button>
         </div>
@@ -374,7 +374,7 @@ export default function CatalogPage() {
             alt={book.title}
             className="w-20 h-28 object-cover rounded flex-shrink-0"
           />
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 flex flex-col">
             <div className="flex items-start justify-between mb-2">
               <div>
                 <h3 className="font-bold text-lg text-gray-900 mb-1">{book.title}</h3>
@@ -395,8 +395,9 @@ export default function CatalogPage() {
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-4">{book.description}</p>
-            <div className="flex gap-2">
+            <div className="mt-auto flex gap-2">
               <Button 
+                className="flex-1"
                 size="sm"
                 variant={book.available ? 'default' : 'secondary'}
                 disabled={!book.available}
@@ -404,7 +405,7 @@ export default function CatalogPage() {
               >
                 {book.available ? 'Borrow Book' : 'Unavailable'}
               </Button>
-              <Button variant="outline" size="sm">
+              <Button className="flex-1" variant="outline" size="sm">
                 View Details
               </Button>
             </div>
@@ -511,12 +512,12 @@ export default function CatalogPage() {
             ) : (
               <div className={
                 viewMode === 'grid' 
-                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6' 
+                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch' 
                   : 'space-y-4'
               }>
                 {filteredBooks.map((book) => (
                   viewMode === 'grid' 
-                    ? <BookCard key={book.id} book={book} />
+                    ? <div key={book.id} className="h-full"><BookCard book={book} /></div>
                     : <BookListItem key={book.id} book={book} />
                 ))}
               </div>

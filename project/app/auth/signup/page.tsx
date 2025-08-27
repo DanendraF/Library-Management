@@ -90,7 +90,7 @@ export default function SignupPage() {
         <div className="text-center">
           <Link href="/" className="inline-flex items-center space-x-2 mb-8">
             <BookOpen className="h-10 w-10 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">LibraryMS</span>
+            <span className="text-2xl font-bold text-gray-900">LibraryDn</span>
           </Link>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Join Our Library</h2>
           <p className="text-gray-600">Create your account to get started</p>

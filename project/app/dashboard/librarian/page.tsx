@@ -142,7 +142,7 @@ export default function LibrarianDashboard() {
               </div>
               <h3 className="font-semibold text-lg mb-2">Process Returns</h3>
               <p className="text-gray-600 mb-4">Handle book returns and renewals</p>
-              <Button className="w-full" onClick={() => (window.location.href = '/dashboard/member/borrowed')}>Process Returns</Button>
+              <Button className="w-full" onClick={() => (window.location.href = '/dashboard/librarian/transactions')}>Process Returns</Button>
             </CardContent>
           </Card>
 

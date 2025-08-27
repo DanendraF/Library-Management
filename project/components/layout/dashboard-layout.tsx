@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { 
   BookOpen, 
   Home, 
@@ -31,6 +31,7 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = () => {
     logout();
@@ -82,7 +83,7 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
       <div className="p-6 border-b">
         <Link href="/" className="flex items-center space-x-2">
           <BookOpen className="h-8 w-8 text-blue-600" />
-          <span className="text-xl font-bold text-gray-900">LibraryMS</span>
+          <span className="text-xl font-bold text-gray-900">LibraryDn</span>
         </Link>
       </div>
       
@@ -90,15 +91,25 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
         <div className="space-y-1">
           {navigationItems.map((item) => {
             const Icon = item.icon;
+            const isRootDashboard = item.href === `/dashboard/${userRole}`;
+            const isActive = pathname && (
+              isRootDashboard
+                ? pathname === item.href
+                : (pathname === item.href || pathname.startsWith(item.href + '/'))
+            );
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex items-center px-3 py-3 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200 group"
+                className={`flex items-center px-3 py-3 rounded-lg transition-colors duration-200 group border-l-4 ${
+                  isActive
+                    ? 'text-blue-700 bg-blue-50 border-blue-600'
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50 border-transparent'
+                }`}
                 onClick={() => setSidebarOpen(false)}
               >
-                <Icon className="h-5 w-5 mr-3 group-hover:text-blue-600" />
-                <span className="font-medium">{item.label}</span>
+                <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-blue-700' : 'group-hover:text-blue-600'}`} />
+                <span className={`font-medium ${isActive ? 'text-blue-800' : ''}`}>{item.label}</span>
               </Link>
             );
           })}
@@ -167,7 +178,7 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
             </Button>
             <div className="flex items-center space-x-2">
               <BookOpen className="h-6 w-6 text-blue-600" />
-              <span className="font-bold text-gray-900">LibraryMS</span>
+              <span className="font-bold text-gray-900">LibraryDn</span>
             </div>
             <div className="w-8" /> {/* Spacer */}
           </div>

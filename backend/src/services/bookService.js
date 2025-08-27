@@ -35,7 +35,30 @@ export async function listBooks({ search, categoryId, limit = 50, offset = 0 } =
 
   const { data, error } = await query;
   if (error) return { error: error.message };
-  return { books: data || [] };
+
+  // Compute average ratings from reviews and merge
+  const bookIds = (data || []).map(b => b.id);
+  if (bookIds.length === 0) return { books: data || [] };
+
+  const { data: reviewRows, error: avgError } = await supabaseAdmin
+    .from('reviews')
+    .select('book_id, rating')
+    .in('book_id', bookIds);
+
+  if (avgError) return { books: data || [] };
+
+  const sums = new Map();
+  const counts = new Map();
+  for (const r of reviewRows || []) {
+    const bid = r.book_id;
+    const val = Number(r.rating || 0);
+    sums.set(bid, (sums.get(bid) || 0) + val);
+    counts.set(bid, (counts.get(bid) || 0) + 1);
+  }
+  const bookIdToAvg = new Map(Array.from(sums.entries()).map(([bid, sum]) => [bid, (sum / (counts.get(bid) || 1))]));
+  const merged = (data || []).map(b => ({ ...b, rating: Number((bookIdToAvg.get(b.id) || 0).toFixed?.(1) ?? (bookIdToAvg.get(b.id) || 0)) }));
+
+  return { books: merged };
 }
 
 export async function getBookById(id) {
@@ -46,7 +69,16 @@ export async function getBookById(id) {
     .single();
   if (error) return { error: error.message };
   if (!data) return { error: 'Book not found' };
-  return { book: data };
+
+  // attach average rating
+  const { data: ratingsRows } = await supabaseAdmin
+    .from('reviews')
+    .select('rating')
+    .eq('book_id', id);
+  const list = (ratingsRows || []).map(r => Number(r.rating || 0));
+  const avg = list.length ? list.reduce((a,b)=>a+b,0) / list.length : 0;
+  const rounded = Number(avg.toFixed(1));
+  return { book: { ...data, rating: rounded } };
 }
 
 export async function createBook(payload) {
